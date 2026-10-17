@@ -4,22 +4,27 @@ A self-reflection tool for untangling conditional self-worth: a React (Vite) fro
 
 ## Features
 
-- **Coach**: AI chat that remembers the user's recurring hidden rules.
-- **Deconstructor**: breaks one painful thought into a structured analysis and tracks the hidden rule underneath it.
-- **Patterns**: recurring hidden rules, how often each comes up (30 days), and counter-evidence logged against each.
-- **Worth Ledger**: behavioral evidence entries, optionally linked to a rule. Also lists committed micro-reps.
-- **Micro-rep loop**: commit, get an in-app check-in, compare the critic's prediction with what happened, and save the result to the ledger.
-- **Progress**: Rosenberg Self-Esteem Scale every 14 days, plotted over time.
-- **Your Data**: plain-language disclosure, export to JSON, delete everything, and a don't-save mode.
+Five destinations (see `BRAND.md` for the full IA and design system):
+
+- **Today**: home screen with due check-ins, the two ways in, your strongest pattern, commitments, and a self-esteem snapshot.
+- **Reflect**: AI conversation that remembers your recurring hidden rules.
+- **Untangle**: one painful thought broken into the verdict vs. the facts, the hidden rule, what the critic protects, a truer sentence, and one small rep you can commit to.
+- **Evidence**: log moments of self-respect, optionally linked to a rule; committed reps and check-ins live here.
+- **Insights**: patterns ranked by 30-day frequency with history and counter-evidence, plus the Rosenberg Self-Esteem Scale trend.
+- Always available: **Pause** (one-minute breathing grounding) and **Your data** (disclosure, export, delete, don't-save mode).
 - **Safety**: crisis rule in both prompts, client-side crisis detection, persistent 988 footer. See `CLINICAL_REVIEW.md`.
 
 ## Layout
 
 | Path | What it is |
 |---|---|
-| `src/App.jsx` | The whole UI |
-| `api/coach.js` | `POST /api/coach` `{ messages, patterns }` returns `{ text }` |
-| `api/deconstruct.js` | `POST /api/deconstruct` `{ thought, intensity, knownRules }` returns the structured analysis |
+| `src/App.jsx` | App shell, navigation, all state and handlers |
+| `src/screens/` | Today, Reflect, Untangle, Evidence, Insights |
+| `src/components/ui.jsx` | Design-system primitives: logo, Button, Card, Modal, Toast… |
+| `src/components/dialogs.jsx` | Crisis card, grounding, check-in, self-esteem, privacy dialogs |
+| `src/lib/content.js` | All product copy and fixed content |
+| `src/index.css`, `tailwind.config.js` | Brand tokens (light + dark) |
+| `api/coach.js`, `api/deconstruct.js` | AI routes |
 | `api/_lib/prompts.js` | All AI instructions and the deconstruction schema (server-side only) |
 | `api/_lib/guard.js` | Model choice, per-IP rate limit, input limits, error mapping |
 

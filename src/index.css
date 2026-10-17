@@ -2,6 +2,129 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  background: #F6F4EE;
+/* Brand tokens. Every color in the UI comes from here; see BRAND.md for the rationale. */
+:root {
+  color-scheme: light;
+  --bg: #F3EFE6;
+  --surface: #FCFAF5;
+  --sunken: #ECE6DA;
+  --line: #E1D9CA;
+  --line-strong: #CBC1AE;
+  --ink: #1C2521;
+  --ink-2: #48524D;
+  --ink-3: #69716C;
+  --brand: #21443A;
+  --brand-hover: #18342C;
+  --on-brand: #F6F2E9;
+  --on-brand-2: #BFD3C8;
+  --brand-soft: #DFE8E1;
+  --brand-ink: #1E4034;
+  --keystone: #B8552F;
+  --keystone-soft: #F5E3D8;
+  --keystone-ink: #8E3D1F;
+  --rule: #8A5D0B;
+  --rule-soft: #F5EAD0;
+  --danger: #A33A2F;
+  --danger-soft: #F8E4DF;
+  --cat-1: #2A8A5C;
+  --cat-2: #C4502F;
+  --cat-3: #4A63BD;
+  --cat-4: #B88A14;
+  --shadow-card: 0 1px 2px rgba(28, 37, 33, 0.04), 0 4px 16px -8px rgba(28, 37, 33, 0.08);
+  --shadow-lift: 0 2px 4px rgba(28, 37, 33, 0.06), 0 16px 40px -12px rgba(28, 37, 33, 0.22);
+  --grain-opacity: 0.035;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #111714;
+    --surface: #19211D;
+    --sunken: #141B18;
+    --line: #2A3530;
+    --line-strong: #3A4741;
+    --ink: #ECE7DC;
+    --ink-2: #B7BCB4;
+    --ink-3: #8F968F;
+    --brand: #9CCBB2;
+    --brand-hover: #B3D9C4;
+    --on-brand: #0F1F18;
+    --on-brand-2: #2C4A3D;
+    --brand-soft: #1D352B;
+    --brand-ink: #BFE1CE;
+    --keystone: #E58A5F;
+    --keystone-soft: #3A2318;
+    --keystone-ink: #F2B596;
+    --rule: #E6B95C;
+    --rule-soft: #322812;
+    --danger: #F0907F;
+    --danger-soft: #3B1F1A;
+    --cat-1: #3E9A6C;
+    --cat-2: #D2643F;
+    --cat-3: #6A83DA;
+    --cat-4: #B78A22;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-lift: 0 16px 40px -12px rgba(0, 0, 0, 0.6);
+    --grain-opacity: 0.05;
+  }
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-bg text-ink font-sans;
+    font-feature-settings: 'ss01', 'cv11';
+  }
+  /* Subtle paper grain gives the surfaces a printed, tactile quality */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: var(--grain-opacity);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  #root {
+    position: relative;
+    z-index: 1;
+  }
+  ::selection {
+    background: var(--brand);
+    color: var(--on-brand);
+  }
+  :focus-visible {
+    outline: 2px solid var(--keystone);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  .font-display {
+    font-optical-sizing: auto;
+    font-variation-settings: 'SOFT' 50;
+    letter-spacing: -0.015em;
+  }
+}
+
+@layer components {
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3;
+  }
+  .field {
+    @apply w-full rounded-xl bg-sunken border border-line px-4 py-3 text-[15px] text-ink placeholder:text-ink-3 transition-colors;
+  }
+  .field:focus {
+    @apply outline-none border-brand bg-surface;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

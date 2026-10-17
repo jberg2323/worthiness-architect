@@ -1,6 +1,6 @@
 # Clinical Review Packet: The Worthiness Architect
 
-This is for a licensed clinician (psychologist, LCSW, LPC or similar) reviewing the app before it goes to real users. It lists everything the app tells users, everything it tells the AI, and the specific questions we need answered. AI instructions are in `api/_lib/prompts.js`, UI copy and the client-side safety check are in `src/App.jsx`.
+This is for a licensed clinician (psychologist, LCSW, LPC or similar) reviewing the app before it goes to real users. It lists everything the app tells users, everything it tells the AI, and the specific questions we need answered. AI instructions are in `api/_lib/prompts.js`, UI copy is in `src/lib/content.js` and the screens under `src/screens/`; the client-side safety check is `CRISIS_PATTERN` in `src/lib/content.js`.
 
 ## What the app is
 
@@ -17,7 +17,7 @@ A self-reflection tool for people whose sense of worth depends on performance, a
 ## Safety design (please scrutinize this most)
 
 1. **System-prompt override** (`CRISIS_RULE` in `api/_lib/prompts.js`): if the user mentions suicidal thoughts, self-harm, wanting to die, danger or abuse, the model is told to drop the coaching protocol, respond directly and point to 988 or a trusted person.
-2. **Client-side backstop** (`CRISIS_PATTERN` in `src/App.jsx`): a keyword regex shows a crisis-resources card even if the AI fails. In the Coach it appears alongside the AI reply. In the Deconstructor it **replaces** the analysis, and the user must click "I'm safe, continue" to proceed.
+2. **Client-side backstop** (`CRISIS_PATTERN` in `src/lib/content.js`): a keyword regex shows a crisis-resources card even if the AI fails. In the Coach it appears alongside the AI reply. In the Deconstructor it **replaces** the analysis, and the user must click "I'm safe, continue" to proceed.
 3. **Persistent footer** on every screen: not therapy or emergency care, plus 988 and local emergency numbers.
 
 Known limitations:
