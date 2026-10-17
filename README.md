@@ -6,11 +6,11 @@ A self-reflection tool for untangling conditional self-worth: a React (Vite) fro
 
 Five destinations (see `BRAND.md` for the full IA and design system):
 
-- **Today**: home screen with due check-ins, the two ways in, your strongest pattern, commitments, and a self-esteem snapshot.
+- **Reset** (home, the primary use): two taps (what's hitting you, how strong), then swipe through five short, actionable cards. Swipe right if it helped, left to skip; buttons and arrow keys work too, and timed cards have a built-in timer. Re-rate at the end to see the shift. The deck learns which cards help you and mixes in your own past truer sentences and evidence. Library and deck builder: `src/lib/cards.js`.
 - **Reflect**: AI conversation that remembers your recurring hidden rules.
 - **Untangle**: one painful thought broken into the verdict vs. the facts, the hidden rule, what the critic protects, a truer sentence, and one small rep you can commit to.
 - **Evidence**: log moments of self-respect, optionally linked to a rule; committed reps and check-ins live here.
-- **Insights**: patterns ranked by 30-day frequency with history and counter-evidence, plus the Rosenberg Self-Esteem Scale trend.
+- **Insights**: what calms you fastest (average reset shift, most helpful cards), patterns ranked by 30-day frequency with history and counter-evidence, plus the Rosenberg Self-Esteem Scale trend.
 - Always available: **Pause** (one-minute breathing grounding) and **Your data** (disclosure, export, delete, don't-save mode).
 - **Safety**: crisis rule in both prompts, client-side crisis detection, persistent 988 footer. See `CLINICAL_REVIEW.md`.
 
@@ -19,7 +19,9 @@ Five destinations (see `BRAND.md` for the full IA and design system):
 | Path | What it is |
 |---|---|
 | `src/App.jsx` | App shell, navigation, all state and handlers |
-| `src/screens/` | Today, Reflect, Untangle, Evidence, Insights |
+| `src/screens/` | Reset, Reflect, Untangle, Evidence, Insights |
+| `src/components/SwipeDeck.jsx` | Swipeable card stack with drag physics, stamps, timer |
+| `src/lib/cards.js` | Reset states, card library, and the deck builder |
 | `src/components/ui.jsx` | Design-system primitives: logo, Button, Card, Modal, Toast… |
 | `src/components/dialogs.jsx` | Crisis card, grounding, check-in, self-esteem, privacy dialogs |
 | `src/lib/content.js` | All product copy and fixed content |
@@ -30,7 +32,7 @@ Five destinations (see `BRAND.md` for the full IA and design system):
 
 ## Data
 
-All user data lives in the browser's `localStorage` under `wa-*` keys: ledger, examples, hidden rules, rule hits, micro-reps and assessments. Nothing is stored on a server, and the API routes don't log request bodies. The trade-off is that data doesn't sync across devices and is lost if browser data is cleared.
+All user data lives in the browser's `localStorage` under `wa-*` keys: ledger, examples, hidden rules, rule hits, micro-reps, assessments, resets and per-card stats. Nothing is stored on a server, and the API routes don't log request bodies. The trade-off is that data doesn't sync across devices and is lost if browser data is cleared.
 
 ## Running locally
 

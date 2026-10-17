@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Plus, ArrowRight, Repeat, Trash2, TrendingUp, ChevronDown, Layers } from 'lucide-react';
+import { Plus, ArrowRight, Repeat, Trash2, TrendingUp, ChevronDown, Layers, Zap } from 'lucide-react';
 import { Card, Button, EmptyState } from '../components/ui.jsx';
 import ScoreChart from '../components/ScoreChart.jsx';
 import { describeRses, RETAKE_INTERVAL_MS, PATTERN_WINDOW_MS } from '../lib/content.js';
 import { formatDate, plural } from '../lib/format.js';
+import { CARDS } from '../lib/cards.js';
 
 function Stat({ value, label }) {
   return (
@@ -11,6 +12,57 @@ function Stat({ value, label }) {
       <div className="font-display text-[36px] leading-none text-ink">{value}</div>
       <div className="text-[13px] text-ink-2 mt-2">{label}</div>
     </div>
+  );
+}
+
+function ResetSummary({ app }) {
+  const sessions = app.resets.items;
+  const rated = sessions.filter(r => r.before != null && r.after != null);
+  const avgShift = rated.length ? (rated.reduce((s, r) => s + (r.before - r.after), 0) / rated.length).toFixed(1) : null;
+  const titles = Object.fromEntries(CARDS.map(c => [c.id, c.title]));
+  const top = Object.entries(app.cardStats)
+    .filter(([, s]) => s.helped > 0)
+    .sort((a, b) => b[1].helped - a[1].helped)
+    .slice(0, 5)
+    .map(([id, s]) => ({ id, title: titles[id] || 'Your own words', helped: s.helped }));
+
+  if (sessions.length === 0) {
+    return (
+      <EmptyState icon={Zap} title="No resets yet" action={<Button icon={Zap} onClick={() => app.go('reset')}>Start a reset</Button>}>
+        Two-minute resets show you, in numbers, how quickly you can come back down.
+      </EmptyState>
+    );
+  }
+
+  return (
+    <Card className="p-6 sm:p-8 grid md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-8">
+      <div className="flex gap-8">
+        <div>
+          <div className="font-display text-[48px] leading-none text-ink">{avgShift != null ? `−${avgShift}` : '–'}</div>
+          <div className="text-[13px] text-ink-2 mt-2">Average shift per reset<br />(1–10 scale)</div>
+        </div>
+        <div>
+          <div className="font-display text-[48px] leading-none text-ink">{sessions.length}</div>
+          <div className="text-[13px] text-ink-2 mt-2">{sessions.length === 1 ? 'Reset' : 'Resets'} done</div>
+        </div>
+      </div>
+      <div>
+        <h3 className="eyebrow mb-3">Cards that help you most</h3>
+        {top.length === 0 ? (
+          <p className="text-[14px] text-ink-2">Swipe right on cards that help and they'll show up here, and more often in your deck.</p>
+        ) : (
+          <ol className="space-y-2">
+            {top.map((c, i) => (
+              <li key={c.id} className="flex items-center gap-3 text-[15px]">
+                <span className="font-display text-keystone w-4">{i + 1}</span>
+                <span className="flex-1 text-ink">{c.title}</span>
+                <span className="text-[13px] text-ink-3">helped {plural(c.helped, 'time')}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -139,6 +191,14 @@ export default function Insights({ app }) {
           <Stat value={app.ledger.items.length} label="Pieces of evidence" />
         </Card>
       </header>
+
+      <section>
+        <div className="mb-5">
+          <h2 className="font-display text-[26px] text-ink">What calms you fastest</h2>
+          <p className="text-[14px] text-ink-2 mt-1">From your quick resets: how far you come down, and which cards do it.</p>
+        </div>
+        <ResetSummary app={app} />
+      </section>
 
       <section>
         <div className="flex items-end justify-between gap-4 mb-5">

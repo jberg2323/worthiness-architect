@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Sunrise, MessageCircle, Layers, BookMarked, TrendingUp, Wind, Lock, LifeBuoy } from 'lucide-react';
+import { Zap, MessageCircle, Layers, BookMarked, TrendingUp, Wind, Lock, LifeBuoy } from 'lucide-react';
 import { Wordmark, LogoMark, Toast } from './components/ui.jsx';
 import { GroundingDialog, CheckInDialog, AssessmentDialog, PrivacyDialog } from './components/dialogs.jsx';
-import Today from './screens/Today.jsx';
+import Reset from './screens/Reset.jsx';
 import Reflect from './screens/Reflect.jsx';
 import Untangle from './screens/Untangle.jsx';
 import Evidence from './screens/Evidence.jsx';
@@ -15,7 +15,7 @@ import {
 } from './lib/content.js';
 
 const TABS = [
-  { id: 'today', label: 'Today', icon: Sunrise },
+  { id: 'reset', label: 'Reset', icon: Zap },
   { id: 'reflect', label: 'Reflect', icon: MessageCircle },
   { id: 'untangle', label: 'Untangle', icon: Layers },
   { id: 'evidence', label: 'Evidence', icon: BookMarked },
@@ -36,7 +36,7 @@ const FALLBACK_RESULT = {
 };
 
 export default function App() {
-  const [tab, setTab] = useState('today');
+  const [tab, setTab] = useState('reset');
   const [toast, setToast] = useState(null);
   const toastTimerRef = useRef(null);
   const [dialog, setDialog] = useState(null); // 'pause' | 'privacy' | 'assessment' | { checkIn: id }
@@ -50,6 +50,9 @@ export default function App() {
   const ruleHits = useStoredCollection('rule_hits', saveEnabled);
   const reps = useStoredCollection('micro_reps', saveEnabled);
   const assessments = useStoredCollection('assessments', saveEnabled);
+  const resets = useStoredCollection('resets', saveEnabled);
+  // Per-card helped/skipped counts; the deck builder favors cards that have helped before
+  const [cardStats, setCardStats] = useState(() => readStored('wa-card-stats', {}));
 
   // --- Reflect ---
   const [messages, setMessages] = useState([WELCOME_MESSAGE]);
@@ -93,6 +96,12 @@ export default function App() {
   const retakeDue = !latestAssessment || now - latestAssessment.createdAt >= RETAKE_INTERVAL_MS;
   const checkInRep = dialog?.checkIn ? reps.items.find(r => r.id === dialog.checkIn) : null;
 
+  // The user's own words come back as Reset cards: past truer sentences and logged evidence
+  const personalCards = [
+    ...ruleHits.items.filter(h => h.reframe).slice(0, 15).map(h => ({ id: `own-${h.id}`, title: 'Your truer sentence', body: h.reframe })),
+    ...ledger.items.slice(0, 15).map(item => ({ id: `ev-${item.id}`, title: 'Remember this?', body: item.title, sub: item.reflection }))
+  ];
+
   // ==========================================
   // EFFECTS
   // ==========================================
@@ -113,6 +122,10 @@ export default function App() {
   useEffect(() => {
     writeStored('wa-save-enabled', saveEnabled);
   }, [saveEnabled]);
+
+  useEffect(() => {
+    writeStored('wa-card-stats', cardStats);
+  }, [cardStats]);
 
   const go = (nextTab, { ruleId } = {}) => {
     setTab(nextTab);
@@ -188,7 +201,7 @@ export default function App() {
       } else {
         ruleId = rules.add({ label: parsed.ruleLabel || 'Unnamed rule', statement: parsed.hiddenRule || '', createdAt: ts, lastSeenAt: ts });
       }
-      ruleHits.add({ ruleId, thought, intensity, createdAt: ts });
+      ruleHits.add({ ruleId, thought, intensity, reframe: parsed.groundedReframe || '', createdAt: ts });
 
       setResult({
         originalThought: thought,
@@ -312,6 +325,18 @@ export default function App() {
   };
 
   // ==========================================
+  // RESET
+  // ==========================================
+  const recordCard = (cardId, didHelp) => {
+    setCardStats(prev => {
+      const s = prev[cardId] || { helped: 0, skipped: 0 };
+      return { ...prev, [cardId]: didHelp ? { ...s, helped: s.helped + 1 } : { ...s, skipped: s.skipped + 1 } };
+    });
+  };
+
+  const saveReset = (session) => resets.add(session);
+
+  // ==========================================
   // PRIVACY
   // ==========================================
   const exportData = () => {
@@ -321,7 +346,9 @@ export default function App() {
       hiddenRules: rules.items,
       ruleOccurrences: ruleHits.items,
       microReps: reps.items,
-      selfEsteemCheckIns: assessments.items
+      selfEsteemCheckIns: assessments.items,
+      resets: resets.items,
+      cardStats
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -335,7 +362,8 @@ export default function App() {
   };
 
   const deleteAll = () => {
-    [ledger, exampleEntries, rules, ruleHits, reps, assessments].forEach(c => c.removeAll());
+    [ledger, exampleEntries, rules, ruleHits, reps, assessments, resets].forEach(c => c.removeAll());
+    setCardStats({});
     setMessages([WELCOME_MESSAGE]);
     setResult(null);
     setDialog(null);
@@ -343,7 +371,7 @@ export default function App() {
   };
 
   const app = {
-    now, go, ledger, rules, ruleHits, reps, assessments, ledgerItems, rulesById, recentHitsFor, allHitsFor, evidenceFor,
+    now, go, ledger, rules, ruleHits, reps, assessments, resets, cardStats, recordCard, saveReset, personalCards, ledgerItems, rulesById, recentHitsFor, allHitsFor, evidenceFor,
     rankedRules, pendingReps, dueReps, sortedAssessments, latestAssessment, retakeDue,
     openCheckIn: (id) => setDialog({ checkIn: id }),
     openAssessment: () => setDialog('assessment'),
@@ -355,7 +383,7 @@ export default function App() {
     expandedRuleId, setExpandedRuleId, deleteRule, exploreRule, logEvidenceAgainst
   };
 
-  const Screen = { today: Today, reflect: Reflect, untangle: Untangle, evidence: Evidence, insights: Insights }[tab];
+  const Screen = { reset: Reset, reflect: Reflect, untangle: Untangle, evidence: Evidence, insights: Insights }[tab];
 
   return (
     <div className="min-h-[100dvh] flex flex-col">
@@ -363,7 +391,7 @@ export default function App() {
 
       <header className="sticky top-0 z-40 bg-bg border-b border-line">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 md:h-20 flex items-center justify-between gap-4">
-          <button onClick={() => go('today')} className="shrink-0" aria-label="Worthiness Architect, go to Today">
+          <button onClick={() => go('reset')} className="shrink-0" aria-label="Worthiness Architect, go to Reset">
             <span className="hidden sm:block"><Wordmark /></span>
             <span className="sm:hidden"><Wordmark compact /></span>
           </button>
@@ -462,7 +490,7 @@ export default function App() {
       {dialog === 'assessment' && <AssessmentDialog onClose={() => setDialog(null)} onSubmit={submitAssessment} />}
       {dialog === 'privacy' && (
         <PrivacyDialog
-          counts={{ evidence: ledger.items.length, rules: rules.items.length, hits: ruleHits.items.length, reps: reps.items.length, assessments: assessments.items.length }}
+          counts={{ resets: resets.items.length, evidence: ledger.items.length, rules: rules.items.length, hits: ruleHits.items.length, reps: reps.items.length, assessments: assessments.items.length }}
           saveEnabled={saveEnabled}
           onToggleSave={setSaveEnabled}
           onExport={exportData}

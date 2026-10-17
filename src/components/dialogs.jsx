@@ -226,7 +226,7 @@ export function PrivacyDialog({ counts, saveEnabled, onToggleSave, onExport, onD
           Everything you save stays in this browser, on this device. There's no account and no server copy, and nobody else can see it, including us. Clearing your browser data deletes it, and it won't follow you to another device.
         </p>
         <p className="text-ink-3 text-[13px]">
-          Saved now: {counts.evidence} evidence entries, {counts.rules} patterns ({counts.hits} moments), {counts.reps} commitments, {counts.assessments} check-ins. Conversations aren't saved.
+          Saved now: {counts.resets} resets, {counts.evidence} evidence entries, {counts.rules} patterns ({counts.hits} moments), {counts.reps} commitments, {counts.assessments} check-ins. Conversations aren't saved.
         </p>
       </Section>
       <Section title="What the AI sees">

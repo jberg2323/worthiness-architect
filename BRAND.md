@@ -84,17 +84,19 @@ Proportions: roughly 80% Sandstone/Ivory, 15% Ink, 4% Evergreen, 1% Clay. If Cla
 
 ## Motion
 
-Quiet and slow. A 400ms rise on new content; the grounding ring breathes on a 10-second 4-in/6-out cycle. Nothing bounces. All motion turns off under `prefers-reduced-motion`.
+Quiet and slow everywhere except the deck, which should feel physical and immediate: cards follow the finger, tilt with the drag, show a "Helped" or "Skip" stamp, and fly off on release; the next card slides up from the stack. A light haptic tick confirms each swipe where supported. A 400ms rise on new content; the grounding ring breathes on a 10-second 4-in/6-out cycle. Nothing bounces. All motion turns off under `prefers-reduced-motion`.
 
 ## Information architecture
 
+**Primary use is quick state change; depth is optional.** The home screen is a two-tap Reset, and everything deeper is one tap away from it.
+
 | Tab | Job |
 |---|---|
-| **Today** | Home. Greeting, due check-ins, the two ways in, your strongest pattern, commitments, self-esteem snapshot. First visit shows "How this works." |
+| **Reset** (home) | Pick what's hitting you, tap how strong (1–10), and swipe through five 20–60 second cards: body → perspective → kindness (or your own words) → one small action. Re-rate at the end and see the shift (e.g. 8 → 3). Cards you swipe right on come up more often. |
 | **Reflect** | Open conversation (the coach). |
 | **Untangle** | One thought → the hidden rule → a truer sentence → one small rep. |
 | **Evidence** | Log moments of self-respect; committed reps and check-ins. |
-| **Insights** | Patterns ranked by frequency, plus the self-esteem trend. |
+| **Insights** | What calms you fastest (average shift, most helpful cards), patterns ranked by frequency, and the self-esteem trend. |
 
 Always available: **Pause** (one-minute grounding) and **Your data** (privacy).
 
