@@ -30,7 +30,9 @@ export async function POST(request) {
       model: MODEL,
       instructions: buildCoachInstructions(patterns),
       messages,
-      maxOutputTokens: 800,
+      // Reasoning tokens count against maxOutputTokens, so keep it low and leave headroom for the reply
+      reasoning: 'low',
+      maxOutputTokens: 2000,
       abortSignal: AbortSignal.timeout(45000)
     });
     if (!text.trim()) return aiErrorResponse(new Error('Empty response'));

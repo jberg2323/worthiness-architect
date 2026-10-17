@@ -21,7 +21,8 @@ export async function POST(request) {
       instructions: DECONSTRUCT_INSTRUCTIONS,
       prompt: buildDeconstructPrompt({ thought, intensity, knownRules }),
       output: Output.object({ schema: deconstructionSchema }),
-      maxOutputTokens: 2000,
+      reasoning: 'low',
+      maxOutputTokens: 4000,
       abortSignal: AbortSignal.timeout(45000)
     });
     // Only accept a match against an id the client actually sent
