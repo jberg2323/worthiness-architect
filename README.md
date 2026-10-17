@@ -1,6 +1,6 @@
 # The Worthiness Architect
 
-A single-file React app (`App.jsx`) built to run in **Gemini Canvas**. Canvas provides `__firebase_config`, `__app_id`, `__initial_auth_token` and the Gemini API key at runtime. Outside Canvas, the AI calls fail, the app falls back to generic text, and nothing is saved past a reload.
+A self-reflection tool for untangling conditional self-worth: a React (Vite) frontend plus two Vercel Functions that call an AI model through Vercel AI Gateway.
 
 ## Features
 
@@ -13,26 +13,40 @@ A single-file React app (`App.jsx`) built to run in **Gemini Canvas**. Canvas pr
 - **Your Data**: plain-language disclosure, export to JSON, delete everything, and a don't-save mode.
 - **Safety**: crisis rule in both prompts, client-side crisis detection, persistent 988 footer. See `CLINICAL_REVIEW.md`.
 
-## Firestore layout
+## Layout
 
-All data lives under `artifacts/{appId}/users/{uid}/`:
-
-| Collection | Document fields |
+| Path | What it is |
 |---|---|
-| `worth_ledger` | title, reflection, category, source, ruleId, completed, createdAt |
-| `hidden_rules` | label, statement, createdAt, lastSeenAt |
-| `rule_hits` | ruleId, thought, intensity, createdAt |
-| `micro_reps` | text, ruleId, category, status (`pending`/`done`/`released`), dueAt, predicted, actual, releaseNote |
-| `assessments` | answers (10 ints, 0 = strongly agree), score (0–30), createdAt |
+| `src/App.jsx` | The whole UI |
+| `api/coach.js` | `POST /api/coach` `{ messages, patterns }` returns `{ text }` |
+| `api/deconstruct.js` | `POST /api/deconstruct` `{ thought, intensity, knownRules }` returns the structured analysis |
+| `api/_lib/prompts.js` | All AI instructions and the deconstruction schema (server-side only) |
+| `api/_lib/guard.js` | Model choice, per-IP rate limit, input limits, error mapping |
 
-## What Canvas can't do (needed before a real launch)
+## Data
 
-The privacy controls in the app are honest about the current setup but don't fix it. Before real users, it would need:
+All user data lives in the browser's `localStorage` under `wa-*` keys: ledger, examples, hidden rules, rule hits, micro-reps and assessments. Nothing is stored on a server, and the API routes don't log request bodies. The trade-off is that data doesn't sync across devices and is lost if browser data is cleared.
 
-1. **Its own hosting and accounts.** Canvas uses anonymous auth, so data is tied to one browser with no recovery. Real sign-in (e.g. Clerk or Firebase Auth with email or passkeys) lets users keep their data across devices.
-2. **A server-side AI route.** Calls currently go from the browser straight to Gemini. Proxying them through a server keeps the key private, allows rate limiting, and lets you choose a provider and plan with zero-retention or no-training terms. That's what would back a "we never train on your entries" promise. Don't make that claim until it's true.
-3. **Encryption beyond Firebase's default.** Firestore encrypts at rest, but the operator can still read entries. For shame disclosures, consider per-user field-level encryption so even you can't read them.
-4. **Real reminders.** Check-ins are in-app only and appear when the app is open. Push notifications or email need a backend and consent.
-5. **Security rules.** Lock Firestore down to `request.auth.uid == uid` for the user's own path.
-6. **A privacy policy and terms**, plus a legal check on whether health-data rules apply where you operate (e.g. US state consumer-health-data laws, GDPR special-category data).
-7. **Clinical review.** Send `CLINICAL_REVIEW.md` to a licensed advisor.
+## Running locally
+
+```bash
+npm install
+vercel link          # once, to the jberg2323s-projects team
+vercel env pull      # gets a short-lived VERCEL_OIDC_TOKEN for AI Gateway
+npm run dev          # runs `vercel dev` (frontend and /api together)
+```
+
+## AI model and cost
+
+- The model defaults to `google/gemini-2.5-flash`. Override it with the `AI_GATEWAY_MODEL` env var. The ID must exist in `https://ai-gateway.vercel.sh/v1/models`.
+- The team is on AI Gateway's free tier, which allows only some models. Upgrading to paid credits unlocks others, such as `google/gemini-3-flash`, the model this app was originally written for.
+- Auth uses Vercel OIDC automatically on deployments, so there's no API key to manage.
+- The per-IP rate limit (30 requests per 10 minutes) is best-effort and per function instance. **Set an AI Gateway budget** as the real spending ceiling: `vercel ai-gateway budgets --help`.
+
+## Still needed before a serious launch
+
+1. **Accounts and sync**, if users want their data on more than one device. Today's browser-only storage is the most private option but the least durable.
+2. **Durable rate limiting**, e.g. Upstash Redis from the Vercel Marketplace, if abuse becomes a problem.
+3. **Real reminders.** Check-ins are in-app only. Push or email needs a backend and consent.
+4. **A privacy policy and terms**, plus a legal check on health-data rules where you operate (e.g. US state consumer-health-data laws, GDPR special-category data).
+5. **Clinical review.** Send `CLINICAL_REVIEW.md` to a licensed advisor.

@@ -1,6 +1,6 @@
 # Clinical Review Packet: The Worthiness Architect
 
-This is for a licensed clinician (psychologist, LCSW, LPC or similar) reviewing the app before it goes to real users. It lists everything the app tells users, everything it tells the AI, and the specific questions we need answered. Line references point to `App.jsx`.
+This is for a licensed clinician (psychologist, LCSW, LPC or similar) reviewing the app before it goes to real users. It lists everything the app tells users, everything it tells the AI, and the specific questions we need answered. AI instructions are in `api/_lib/prompts.js`, UI copy and the client-side safety check are in `src/App.jsx`.
 
 ## What the app is
 
@@ -8,7 +8,7 @@ A self-reflection tool for people whose sense of worth depends on performance, a
 
 | Area | What it does |
 |---|---|
-| Coach | Open-ended chat with an LLM (Gemini) using the system prompt below. Draws on CBT, ACT, IFS and Neff's self-compassion work. |
+| Coach | Open-ended chat with an LLM (currently Google Gemini, via Vercel AI Gateway) using the system prompt below. Draws on CBT, ACT, IFS and Neff's self-compassion work. |
 | Deconstructor | The user enters one painful thought and a distress rating (1–10). The LLM returns structured fields: shame-to-guilt translation, identity fusion, hidden rule, protector motive (IFS), grounded reframe, suggested micro-rep. |
 | Patterns | Hidden rules are saved, and repeat occurrences are matched to an existing rule by the LLM. Shows frequency over 30 days, average distress, and logged counter-evidence. |
 | Micro-rep loop | The user commits to a small behavior and picks a check-in time. At check-in: "Did you do it?", then "What did your critic predict?" vs. "What actually happened?" (a behavioral-experiment framing). Skipping is framed as information, not failure. |
@@ -16,8 +16,8 @@ A self-reflection tool for people whose sense of worth depends on performance, a
 
 ## Safety design (please scrutinize this most)
 
-1. **System-prompt override** (`CRISIS_RULE`): if the user mentions suicidal thoughts, self-harm, wanting to die, danger or abuse, the model is told to drop the coaching protocol, respond directly and point to 988 or a trusted person.
-2. **Client-side backstop** (`CRISIS_PATTERN`): a keyword regex shows a crisis-resources card even if the AI fails. In the Coach it appears alongside the AI reply. In the Deconstructor it **replaces** the analysis, and the user must click "I'm safe, continue" to proceed.
+1. **System-prompt override** (`CRISIS_RULE` in `api/_lib/prompts.js`): if the user mentions suicidal thoughts, self-harm, wanting to die, danger or abuse, the model is told to drop the coaching protocol, respond directly and point to 988 or a trusted person.
+2. **Client-side backstop** (`CRISIS_PATTERN` in `src/App.jsx`): a keyword regex shows a crisis-resources card even if the AI fails. In the Coach it appears alongside the AI reply. In the Deconstructor it **replaces** the analysis, and the user must click "I'm safe, continue" to proceed.
 3. **Persistent footer** on every screen: not therapy or emergency care, plus 988 and local emergency numbers.
 
 Known limitations:
@@ -28,8 +28,10 @@ Known limitations:
 
 ## Exact AI instructions
 
-- Coach: `COACH_SYSTEM_PROMPT`, plus up to 5 of the user's recurring hidden rules appended as context (`buildCoachSystemPrompt`).
-- Deconstructor: the system instruction and the JSON schema field descriptions inside `handleDeconstruct`.
+All in `api/_lib/prompts.js`:
+
+- Coach: `COACH_SYSTEM_PROMPT`, plus up to 5 of the user's recurring hidden rules appended as context (`buildCoachInstructions`).
+- Deconstructor: `DECONSTRUCT_INSTRUCTIONS`, `buildDeconstructPrompt`, and the field descriptions in `deconstructionSchema`.
 
 ## Questions for the reviewer
 
@@ -55,4 +57,4 @@ Known limitations:
 
 - Written sign-off or required changes on the safety design and the prompts.
 - Permission (or not) to name you as a clinical advisor in the app and marketing.
-- Ideally, a recurring review of a sample of anonymized AI outputs. This needs consent and a data-handling plan first; see `README.md`.
+- Ideally, a recurring review of a sample of anonymized AI outputs. User data currently lives only in each user's browser, so this would need an explicit opt-in sharing feature, consent and a data-handling plan first.

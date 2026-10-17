@@ -1,21 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { initializeApp } from 'firebase/app';
-import {
-  getAuth,
-  signInAnonymously,
-  signInWithCustomToken,
-  onAuthStateChanged
-} from 'firebase/auth';
-import {
-  getFirestore,
-  collection,
-  addDoc,
-  deleteDoc,
-  updateDoc,
-  getDocs,
-  doc,
-  onSnapshot
-} from 'firebase/firestore';
 import {
   ShieldAlert,
   Compass,
@@ -49,131 +32,70 @@ import {
 } from 'lucide-react';
 
 // ==========================================
-// FIREBASE INITIALIZATION & CONFIG
+// BROWSER STORAGE
 // ==========================================
-let app = null;
-let auth = null;
-let db = null;
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'unconditional-worth-architect';
-
-try {
-  if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-    const firebaseConfig = JSON.parse(__firebase_config);
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
+// Entries live in this browser's localStorage only; there's no server-side database.
+// Items marked `ephemeral` (added while saving is off) stay in memory and are never written.
+const readStored = (key, fallback) => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
   }
-} catch (error) {
-  console.warn("Using local session fallback:", error);
-}
+};
 
-const userCollection = (user, name) => collection(db, 'artifacts', appId, 'users', user.uid, name);
+const writeStored = (key, value) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Storage unavailable (private window, quota); data lasts for this session only
+  }
+};
 
-// Firestore-backed collection with an in-memory fallback. Items with `local-` ids exist only
-// in this session (no Firebase, not signed in yet, a failed write, or cloud saving turned off).
-function useUserCollection(user, name, cloudEnabled) {
-  const [items, setItems] = useState([]);
-  const [loaded, setLoaded] = useState(!db);
+function useStoredCollection(name, saveEnabled, initialItems = []) {
+  const key = `wa-${name}`;
+  const [items, setItems] = useState(() => readStored(key, initialItems));
 
   useEffect(() => {
-    if (!user || !db) return;
-    const unsubscribe = onSnapshot(
-      userCollection(user, name),
-      (snapshot) => {
-        const fetched = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-        setItems(prev => [...fetched, ...prev.filter(item => item.id.startsWith('local-'))]);
-        setLoaded(true);
-      },
-      (err) => {
-        console.warn(`Firestore listener warning (${name}):`, err);
-        setLoaded(true);
-      }
-    );
-    return () => unsubscribe();
-  }, [user, name]);
+    writeStored(key, items.filter(item => !item.ephemeral));
+  }, [key, items]);
 
-  const add = async (data) => {
-    if (user && db && cloudEnabled) {
-      try {
-        const ref = await addDoc(userCollection(user, name), data);
-        return ref.id;
-      } catch (err) {
-        console.warn(`Saved ${name} to session memory:`, err);
-      }
-    }
-    const id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    setItems(prev => [{ id, ...data }, ...prev]);
+  const add = (data) => {
+    const id = `${name}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setItems(prev => [{ id, ...data, ...(saveEnabled ? {} : { ephemeral: true }) }, ...prev]);
     return id;
   };
 
-  const update = async (id, patch) => {
+  const update = (id, patch) => {
     setItems(prev => prev.map(item => (item.id === id ? { ...item, ...patch } : item)));
-    if (user && db && !id.startsWith('local-')) {
-      try {
-        await updateDoc(doc(userCollection(user, name), id), patch);
-      } catch (err) {
-        console.warn(`Update error (${name}):`, err);
-      }
-    }
   };
 
-  const remove = async (id) => {
+  const remove = (id) => {
     setItems(prev => prev.filter(item => item.id !== id));
-    if (user && db && !id.startsWith('local-')) {
-      try {
-        await deleteDoc(doc(userCollection(user, name), id));
-      } catch (err) {
-        console.warn(`Delete error (${name}):`, err);
-      }
-    }
   };
 
-  // Reads the collection fresh so nothing is missed, even documents not yet loaded
-  const removeAll = async () => {
-    setItems([]);
-    if (user && db) {
-      const snapshot = await getDocs(userCollection(user, name));
-      await Promise.all(snapshot.docs.map(docSnap => deleteDoc(docSnap.ref)));
-    }
-  };
+  const removeAll = () => setItems([]);
 
-  return { items, loaded, add, update, remove, removeAll };
+  return { items, loaded: true, add, update, remove, removeAll };
 }
 
 // ==========================================
-// GEMINI API HELPER WITH EXPONENTIAL BACKOFF
+// AI API (server routes in /api)
 // ==========================================
-const apiKey = ""; // Provided by runtime environment
-
-async function callGeminiAPI(payload, retries = 4) {
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const httpError = new Error(`API status ${response.status}`);
-        httpError.status = response.status;
-        throw httpError;
-      }
-
-      const result = await response.json();
-      const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) throw new Error("Empty response from AI");
-      return text;
-    } catch (err) {
-      // Only retry network errors, empty responses, rate limits, and server errors
-      const retryable = !err.status || err.status === 429 || err.status >= 500;
-      if (attempt === retries || !retryable) throw err;
-      const delay = Math.pow(2, attempt) * 1000;
-      await new Promise(res => setTimeout(res, delay));
-    }
+async function postJSON(path, body) {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(data.error || `Request failed (${response.status})`);
+    err.status = response.status;
+    throw err;
   }
+  return data;
 }
 
 // ==========================================
@@ -183,27 +105,8 @@ const DAY_MS = 86400000;
 const PATTERN_WINDOW_MS = 30 * DAY_MS;
 const RETAKE_INTERVAL_MS = 14 * DAY_MS;
 
-const CRISIS_RULE = `SAFETY OVERRIDE (takes priority over everything else): If the user mentions suicidal thoughts, self-harm, wanting to die, being in danger, or being abused, stop the coaching protocol. Respond with direct, plain warmth, take what they said seriously, and encourage them to reach out right now to a crisis line (in the US, call or text 988, the Suicide & Crisis Lifeline; outside the US, a local emergency number or crisis line) or to someone they trust. Do not reframe, analyze, or minimize their distress in that case.`;
-
 // Client-side backstop so crisis resources appear even if the AI call fails
 const CRISIS_PATTERN = /\b(suicid\w*|kill(ing)? myself|end(ing)? (my|it all|my life)|want(ed)? to die|wish i (was|were) dead|better off dead|no reason to (live|go on)|self[- ]?harm\w*|hurt(ing)? myself|cut(ting)? myself|harm(ing)? myself)\b/i;
-
-const COACH_SYSTEM_PROMPT = `You are "The Worthiness Architect"—an insightful, grounded, and compassionate reflective guide informed by Cognitive Behavioral Therapy (CBT), Acceptance and Commitment Therapy (ACT), Internal Family Systems (IFS), and Kristin Neff’s Self-Compassion framework. You are not a therapist and never claim to be one.
-Your singular goal is to help the user heal their "self-worth wound"—the core belief that they are fundamentally flawed, not enough, or only valuable when they achieve, please others, or perform perfectly.
-
-${CRISIS_RULE}
-
-STRICT RULES OF ENGAGEMENT:
-1. No Toxic Positivity or Empty Flattery: Never reply with generic hype like "You are amazing!" or "You're the best!" A wounded brain rejects unearned praise. Ground every observation in reality, shared humanity, and inherent human dignity.
-2. Separate "Self" from "Behavior": Consistently catch when the user fuses their identity with their performance, mistakes, or external reception (e.g., shifting "I am a failure" to "I experienced a setback in a specific task, while my foundational worth as a person remains untouched").
-3. One Question at a Time: Never overwhelm the user with a wall of questions. Ask ONE incisive, gentle question at the end of your turn to guide them deeper.
-4. Keep responses warm, structured, readable, and concise (2-3 short paragraphs maximum).
-
-YOUR 4-STEP COACHING PROTOCOL (Execute dynamically):
-- Name the Trigger & the Critic: Validate the painful emotion without validating the false core belief of unworthiness. Help identify the "Inner Critic" or "Protector Part" speaking.
-- Audit the Hidden Rule: Uncover the silent condition they are placing on their worth right now (e.g., "I am only allowed to take up space if nobody is upset with me" or "My value equals my output today").
-- The Compassionate Reframe: Guide them to separate their inherent dignity from external outcomes, or speak to the part of them that learned love/worth had to be earned.
-- The Micro-Rep: Suggest or co-create one small, concrete "behavioral rep" of self-worth—an action that proves they matter right now (e.g., holding a boundary, resting without apologizing, speaking neutrally to themselves).`;
 
 const QUICK_STARTERS = [
   {
@@ -354,20 +257,20 @@ const WELCOME_MESSAGE = {
   timestamp: Date.now()
 };
 
-// Gemini expects alternating user/model turns, so skip UI-only messages and merge adjacent same-role turns
-function buildApiContents(messages) {
-  const contents = [];
+// Skip UI-only messages and merge adjacent same-role turns so roles always alternate
+function buildChatMessages(messages) {
+  const result = [];
   for (const m of messages) {
     if (m.kind) continue;
-    const role = m.role === 'model' ? 'model' : 'user';
-    const last = contents[contents.length - 1];
+    const role = m.role === 'model' ? 'assistant' : 'user';
+    const last = result[result.length - 1];
     if (last && last.role === role) {
-      last.parts[0].text += `\n\n${m.text}`;
+      last.content += `\n\n${m.text}`;
     } else {
-      contents.push({ role, parts: [{ text: m.text }] });
+      result.push({ role, content: m.text });
     }
   }
-  return contents;
+  return result;
 }
 
 // ==========================================
@@ -653,7 +556,6 @@ function ScoreChart({ points }) {
 // ==========================================
 export default function App() {
   const [activeTab, setActiveTab] = useState('coach'); // 'coach' | 'deconstructor' | 'patterns' | 'ledger' | 'progress'
-  const [user, setUser] = useState(null);
   const [toast, setToast] = useState(null);
   const toastTimerRef = useRef(null);
   const [somaticModalOpen, setSomaticModalOpen] = useState(false);
@@ -661,22 +563,17 @@ export default function App() {
   const [now, setNow] = useState(Date.now());
 
   // --- Privacy State ---
-  const [cloudEnabled, setCloudEnabled] = useState(() => {
-    try {
-      return localStorage.getItem('wa-cloud-off') !== '1';
-    } catch {
-      return true;
-    }
-  });
+  const [saveEnabled, setSaveEnabled] = useState(() => readStored('wa-save-enabled', true));
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
 
-  // --- Synced collections ---
-  const ledger = useUserCollection(user, 'worth_ledger', cloudEnabled);
-  const rules = useUserCollection(user, 'hidden_rules', cloudEnabled);
-  const ruleHits = useUserCollection(user, 'rule_hits', cloudEnabled);
-  const reps = useUserCollection(user, 'micro_reps', cloudEnabled);
-  const assessments = useUserCollection(user, 'assessments', cloudEnabled);
+  // --- Stored collections ---
+  const ledger = useStoredCollection('worth_ledger', saveEnabled);
+  const exampleEntries = useStoredCollection('examples', true, DEFAULT_LEDGER_ITEMS);
+  const rules = useStoredCollection('hidden_rules', saveEnabled);
+  const ruleHits = useStoredCollection('rule_hits', saveEnabled);
+  const reps = useStoredCollection('micro_reps', saveEnabled);
+  const assessments = useStoredCollection('assessments', saveEnabled);
 
   // --- Chat Coach State ---
   const [messages, setMessages] = useState([WELCOME_MESSAGE]);
@@ -697,8 +594,6 @@ export default function App() {
   const [confirmDeleteRuleId, setConfirmDeleteRuleId] = useState(null);
 
   // --- Ledger State ---
-  // Seed examples live only in this session; user entries come from Firestore (or local fallback)
-  const [seedItems, setSeedItems] = useState(DEFAULT_LEDGER_ITEMS);
   const [newRepTitle, setNewRepTitle] = useState('');
   const [newRepReflection, setNewRepReflection] = useState('');
   const [newRepCategory, setNewRepCategory] = useState('unhooked');
@@ -714,7 +609,7 @@ export default function App() {
   // ==========================================
   // DERIVED DATA
   // ==========================================
-  const ledgerItems = [...ledger.items, ...seedItems].sort(
+  const ledgerItems = [...ledger.items, ...exampleEntries.items].sort(
     (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
   );
   const rulesById = Object.fromEntries(rules.items.map(r => [r.id, r]));
@@ -757,32 +652,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('wa-cloud-off', cloudEnabled ? '0' : '1');
-    } catch {
-      // Storage unavailable; the setting lasts for this session only
-    }
-  }, [cloudEnabled]);
-
-  useEffect(() => {
-    if (!auth) return;
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (err) {
-        console.warn("Auth initialization error:", err);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-    });
-    return () => unsubscribe();
-  }, []);
+    writeStored('wa-save-enabled', saveEnabled);
+  }, [saveEnabled]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -792,17 +663,8 @@ export default function App() {
   // ==========================================
   // MODULE 1: AI COACH HANDLERS
   // ==========================================
-  const buildCoachSystemPrompt = () => {
-    const topRules = rankedRules.slice(0, 5);
-    if (topRules.length === 0) return COACH_SYSTEM_PROMPT;
-    const lines = topRules
-      .map(r => `- "${r.statement}" (came up ${recentHitsFor(r.id).length} times in the last 30 days)`)
-      .join('\n');
-    return `${COACH_SYSTEM_PROMPT}
-
-CONTEXT FROM THIS USER'S PATTERN TRACKER (hidden rules they've identified in past sessions; draw on them only when relevant and never list them back mechanically):
-${lines}`;
-  };
+  const topPatterns = () =>
+    rankedRules.slice(0, 5).map(r => ({ statement: r.statement, count: recentHitsFor(r.id).length }));
 
   const handleSendMessage = async (overrideText = null) => {
     const textToSend = (overrideText !== null ? overrideText : chatInput).trim();
@@ -824,14 +686,10 @@ ${lines}`;
     setIsChatLoading(true);
 
     try {
-      const payload = {
-        contents: buildApiContents(updatedMessages),
-        systemInstruction: {
-          parts: [{ text: buildCoachSystemPrompt() }]
-        }
-      };
-
-      const replyText = await callGeminiAPI(payload);
+      const { text: replyText } = await postJSON('/api/coach', {
+        messages: buildChatMessages(updatedMessages),
+        patterns: topPatterns()
+      });
 
       setMessages(prev => [
         ...prev,
@@ -891,81 +749,11 @@ ${lines}`;
 
     const knownRules = [...rules.items]
       .sort((a, b) => (b.lastSeenAt || 0) - (a.lastSeenAt || 0))
-      .slice(0, 20);
-    const rulesContext = knownRules.length
-      ? `\n\nThis user's previously identified hidden rules (id | rule):\n${knownRules.map(r => `${r.id} | ${r.statement}`).join('\n')}\n\nIf the hidden rule in this thought is essentially the same underlying rule as one of these (even if worded differently), return that id as matchedRuleId. Otherwise return an empty string for matchedRuleId.`
-      : `\n\nReturn an empty string for matchedRuleId.`;
-
-    const prompt = `Analyze the following painful thought or self-worth trigger from a user (Distress level: ${emotionIntensity}/10):
-"${thought}"
-
-Deconstruct this thought thoroughly using CBT, ACT (cognitive defusion), IFS (Internal Family Systems), and Brené Brown's Shame-vs-Guilt distinction. Avoid any cheesy toxic positivity. Ground everything in reality and unconditional human dignity.${rulesContext}`;
-
-    const payload = {
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      systemInstruction: {
-        parts: [{ text: `You are a compassionate reflective guide informed by CBT, IFS, and ACT. You are not a therapist and do not diagnose. Deconstruct the user's shame statement into clear, deeply insightful, non-cheesy components.\n\n${CRISIS_RULE} In that case, use every field to gently urge them to contact 988 or a trusted person now instead of analyzing the thought.` }]
-      },
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "OBJECT",
-          properties: {
-            shameVsGuilt: {
-              type: "STRING",
-              description: "Translate the statement from Shame ('I am bad/defective') into objective reality or Guilt ('I did or experienced X, which is separate from who I am')."
-            },
-            fusionTrap: {
-              type: "STRING",
-              description: "Explain how the user is fusing their core identity with an external metric, mistake, or another person's reaction."
-            },
-            hiddenRule: {
-              type: "STRING",
-              description: "State the exact silent conditional rule operating underneath (e.g., 'I am only worthy of peace if I never inconvenience anyone')."
-            },
-            ruleLabel: {
-              type: "STRING",
-              description: "A short 3–7 word name for the hidden rule that makes it easy to recognize later, e.g. 'My worth = my output' or 'Others' disappointment means I'm bad'."
-            },
-            matchedRuleId: {
-              type: "STRING",
-              description: "The id of a previously identified rule that this is the same as, or an empty string."
-            },
-            protectorMotive: {
-              type: "STRING",
-              description: "Using Internal Family Systems (IFS), explain with empathy what this harsh Inner Critic is trying to protect the user from (e.g., attacking them first so rejection from others won't blindside them)."
-            },
-            groundedReframe: {
-              type: "STRING",
-              description: "A calm, dignified, realistic statement the user can actually believe right now without toxic positivity."
-            },
-            microRep: {
-              type: "STRING",
-              description: "One concrete, small physical or behavioral Micro-Rep of self-respect the user can do today, phrased as an action they can later say they did or didn't do."
-            },
-            suggestedCategory: {
-              type: "STRING",
-              description: "One of: 'rested', 'boundary', 'mistake', or 'unhooked'"
-            }
-          },
-          propertyOrdering: [
-            "shameVsGuilt",
-            "fusionTrap",
-            "hiddenRule",
-            "ruleLabel",
-            "matchedRuleId",
-            "protectorMotive",
-            "groundedReframe",
-            "microRep",
-            "suggestedCategory"
-          ]
-        }
-      }
-    };
+      .slice(0, 20)
+      .map(r => ({ id: r.id, statement: r.statement }));
 
     try {
-      const jsonStr = await callGeminiAPI(payload);
-      const parsed = JSON.parse(jsonStr);
+      const parsed = await postJSON('/api/deconstruct', { thought, intensity: emotionIntensity, knownRules });
 
       // Record this occurrence against an existing rule, or start tracking a new one
       const ts = Date.now();
@@ -1058,7 +846,7 @@ Deconstruct this thought thoroughly using CBT, ACT (cognitive defusion), IFS (In
 
   const handleDeleteLedgerItem = (id) => {
     if (id.startsWith('seed-')) {
-      setSeedItems(prev => prev.filter(item => item.id !== id));
+      exampleEntries.remove(id);
       return;
     }
     ledger.remove(id);
@@ -1155,8 +943,7 @@ Deconstruct this thought thoroughly using CBT, ACT (cognitive defusion), IFS (In
   const handleDeleteAll = async () => {
     setIsDeletingAll(true);
     try {
-      await Promise.all([ledger, rules, ruleHits, reps, assessments].map(c => c.removeAll()));
-      setSeedItems([]);
+      [ledger, exampleEntries, rules, ruleHits, reps, assessments].forEach(c => c.removeAll());
       setMessages([WELCOME_MESSAGE]);
       setDeconstructionResult(null);
       setConfirmDeleteAll(false);
@@ -1261,24 +1048,22 @@ Deconstruct this thought thoroughly using CBT, ACT (cognitive defusion), IFS (In
                 Your ledger ({userLedgerCount}), hidden rules ({rules.items.length}) and the thoughts that triggered them ({ruleHits.items.length}), micro-rep commitments ({reps.items.length}), and self-esteem check-ins ({assessments.items.length}). Coach conversations are not saved; they clear when you start a new thread or reload.
               </p>
               <p className="text-xs">
-                {db
-                  ? "Saved entries are stored in this app's Firebase database under an anonymous account tied to this browser. There's no password, so clearing your browser data may make them unreachable."
-                  : "Cloud storage isn't available here, so everything lives in this browser tab and disappears when you reload."}
+                Saved entries are stored only in this browser on this device, not on a server and not in an account. Nobody else, including the app's maker, can see them. Clearing your browser data deletes them, and they won't follow you to another device.
               </p>
             </div>
 
             <div className="p-4 rounded-2xl bg-[#F2EFE9] border border-stone-200/80 space-y-2">
               <h4 className="font-semibold text-stone-900 text-sm">What's sent to AI</h4>
               <p className="text-xs">
-                Text you send to the Coach or Deconstructor is sent to Google's Gemini API to generate a response. The Coach also receives short summaries of your recurring hidden rules so it can remember your patterns. Google's handling of that text is governed by Google's terms. This app doesn't use your entries for anything except showing them back to you.
+                Text you send to the Coach or Deconstructor passes through this app's server to an AI model (Google Gemini, via Vercel AI Gateway) to generate a response. The Coach also receives short summaries of your recurring hidden rules so it can remember your patterns. The app's server doesn't store what you send. The AI provider's handling of it is governed by its own terms.
               </p>
             </div>
 
             <label className="flex items-start gap-3 p-4 rounded-2xl border border-stone-200 cursor-pointer hover:bg-[#F2EFE9]/60">
               <input
                 type="checkbox"
-                checked={!cloudEnabled}
-                onChange={(e) => setCloudEnabled(!e.target.checked)}
+                checked={!saveEnabled}
+                onChange={(e) => setSaveEnabled(!e.target.checked)}
                 className="mt-1 accent-[#2C443B]"
               />
               <span className="text-xs">
